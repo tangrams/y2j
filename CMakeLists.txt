@@ -8,7 +8,9 @@ option(Y2J_BUILD_TESTS "Build tests for Y2J" ON)
 
 add_subdirectory(libyaml)
 
-include_directories(libyaml/include rapidjson)
+add_subdirectory(yaml-cpp)
+
+include_directories(libyaml/include yaml-cpp/include rapidjson)
 
 add_library(y2j y2j.cpp)
 
@@ -21,3 +23,5 @@ target_link_libraries(parse-test y2j)
 if (Y2J_BUILD_TESTS)
   add_subdirectory(tests)
 endif()
+
+target_link_libraries(parse-test yaml-cpp)

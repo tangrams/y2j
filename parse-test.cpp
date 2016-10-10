@@ -1,5 +1,5 @@
 #include "y2j.h"
-#include "rapidjson/prettywriter.h"
+#include "yaml-cpp/yaml.h"
 #include <cstdio>
 #include <ctime>
 #include <string>
@@ -45,16 +45,19 @@ int main(int argc, char* argv[]) {
     JsonDocument document = yamlParseBytes(inputString, inputSize, &errorMessage, &errorLine);
     clock_t t1 = clock();
     double millis = 1000.0 * (t1 - t0) / CLOCKS_PER_SEC;
-    printf("Parsed in %f ms\n", millis);
+    printf("y2j: Parsed in %f ms\n", millis);
 
     if (errorMessage) {
         printf("Error: %s at line: %lu\n", errorMessage, errorLine);
     }
 
-    rapidjson::StringBuffer buffer;
-    rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
-    document.Accept(writer);
-    printf("JSON result:\n%s\n", buffer.GetString());
+    t0 = clock();
+    YAML::Node node = YAML::Load(inputString);
+    t1 = clock();
+    millis = 1000.0 * (t1 - t0) / CLOCKS_PER_SEC;
+    printf("yaml-cpp: Parsed in %f ms\n", millis);
+
+
 
     return 0;
 }
