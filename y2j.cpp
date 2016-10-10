@@ -97,6 +97,7 @@ struct Generator {
                 DBG(printf("%s[\n", indent.c_str()); indent += "    ";)
                 ok = handler.StartArray();
                 pushCollection(false);
+                // FIXME: If a sequence is found in a map key, add a key with a string-ified sequence instead.
                 break;
             case YAML_SEQUENCE_END_EVENT:
                 DBG(indent.resize(indent.size() - 4); printf("%s] (members: %lu)\n", indent.c_str(), getSeqLength());)
@@ -107,6 +108,7 @@ struct Generator {
                 DBG(printf("%s{\n", indent.c_str()); indent += "    ";)
                 ok = handler.StartObject();
                 pushCollection(true);
+                // FIXME: If a mapping is found in a map key, add a key with a string-ified mapping instead.
                 break;
             case YAML_MAPPING_END_EVENT:
                 DBG(indent.resize(indent.size() - 4); printf("%s} (members: %lu)\n", indent.c_str(), getMapLength());)
@@ -124,6 +126,7 @@ struct Generator {
                 } else {
                     DBG(printf("%s\"%s\"\n", indent.c_str(), event.data.scalar.value);)
                     ok = handler.String((char*)event.data.scalar.value, event.data.scalar.length, true);
+                    // FIXME: Deduce types for integer, float, boolean, and null scalar values.
                 }
                 ++collection.count;
                 break;
