@@ -11,17 +11,6 @@
 
 namespace y2j {
 
-const char* yamlErrorStrings[] = {
-    "YAML_NO_ERROR",
-    "YAML_MEMORY_ERROR",
-    "YAML_READER_ERROR",
-    "YAML_SCANNER_ERROR",
-    "YAML_PARSER_ERROR",
-    "YAML_COMPOSER_ERROR",
-    "YAML_WRITER_ERROR",
-    "YAML_EMITTER_ERROR"
-};
-
 struct Collection {
     size_t count = 0;
     bool isMapping = false;
@@ -69,8 +58,12 @@ struct Generator {
 
         do {
             if (!yaml_parser_parse(&parser, &event)) {
-                *errorMessage = yamlErrorStrings[parser.error];
-                *errorOffset = event.start_mark.index;
+                if (errorMessage) {
+                    *errorMessage = parser.problem;
+                }
+                if (errorOffset) {
+                    *errorOffset = parser.context_mark.index;
+                }
                 ok = false;
                 break;
             }

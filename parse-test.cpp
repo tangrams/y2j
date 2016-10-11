@@ -39,12 +39,16 @@ int main(int argc, char* argv[]) {
     }
 
     clock_t t0 = clock();
-    const char* error = nullptr;
+    const char* errorMessage = nullptr;
     size_t errorOffset = 0;
-    JsonDocument document = yamlParseBytes(inputString, inputSize, &error, &errorOffset);
+    JsonDocument document = yamlParseBytes(inputString, inputSize, &errorMessage, &errorOffset);
     clock_t t1 = clock();
     double millis = 1000.0 * (t1 - t0) / CLOCKS_PER_SEC;
     printf("Parsed in %f ms\n", millis);
+
+    if (errorMessage) {
+        printf("Error: %s at offset: %lu\n", errorMessage, errorOffset);
+    }
 
     return 0;
 }
