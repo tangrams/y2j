@@ -3,10 +3,8 @@
 #include <string>
 #include <vector>
 
-#if 0
-    #define DBG(stmt) stmt
-#else
-    #define DBG(stmt)
+#ifndef Y2J_DEBUG
+    #define Y2J_DEBUG 1
 #endif
 
 namespace y2j {
@@ -52,7 +50,6 @@ struct Generator {
 
     bool operator()(Handler& handler) {
 
-        DBG(std::string indent;)
         yaml_event_type_t type = YAML_NO_EVENT;
         bool ok = true;
 
@@ -68,56 +65,48 @@ struct Generator {
                 break;
             }
 
+            #if Y2J_DEBUG
+            printEvent(event, parser.indent);
+            #endif
+
             type = event.type;
 
             switch (type) {
             case YAML_NO_EVENT:
-                DBG(printf("No event!\n");)
                 break;
             case YAML_STREAM_START_EVENT:
-                DBG(printf("Start Stream\n");)
                 break;
             case YAML_STREAM_END_EVENT:
-                DBG(printf("End Stream\n");)
                 break;
             case YAML_DOCUMENT_START_EVENT:
-                DBG(printf("%s%s\n", indent.c_str(), "Start Document");)
                 break;
             case YAML_DOCUMENT_END_EVENT:
-                DBG(printf("%s%s\n", indent.c_str(), "End Document");)
                 break;
             case YAML_SEQUENCE_START_EVENT:
-                DBG(printf("%s[\n", indent.c_str()); indent += "    ";)
                 ok = handler.StartArray();
                 pushCollection(false);
                 // FIXME: If a sequence is found in a map key, add a key with a string-ified sequence instead.
                 break;
             case YAML_SEQUENCE_END_EVENT:
-                DBG(indent.resize(indent.size() - 4); printf("%s] (members: %lu)\n", indent.c_str(), getSeqLength());)
                 ok = handler.EndArray(getSeqLength());
                 popCollection();
                 break;
             case YAML_MAPPING_START_EVENT:
-                DBG(printf("%s{\n", indent.c_str()); indent += "    ";)
                 ok = handler.StartObject();
                 pushCollection(true);
                 // FIXME: If a mapping is found in a map key, add a key with a string-ified mapping instead.
                 break;
             case YAML_MAPPING_END_EVENT:
-                DBG(indent.resize(indent.size() - 4); printf("%s} (members: %lu)\n", indent.c_str(), getMapLength());)
                 ok = handler.EndObject(getMapLength());
                 popCollection();
                 break;
             case YAML_ALIAS_EVENT:
-                DBG(printf("%sGot alias (anchor %s)\n", indent.c_str(), event.data.alias.anchor);)
                 // FIXME: Support aliased nodes.
                 break;
             case YAML_SCALAR_EVENT:
                 if (entryIsMapKey()) {
-                    DBG(printf("%s\"%s\":\n", indent.c_str(), event.data.scalar.value);)
                     ok = handler.Key((char*)event.data.scalar.value, event.data.scalar.length, true);
                 } else {
-                    DBG(printf("%s\"%s\"\n", indent.c_str(), event.data.scalar.value);)
                     ok = handler.String((char*)event.data.scalar.value, event.data.scalar.length, true);
                     // FIXME: Deduce types for integer, float, boolean, and null scalar values.
                 }
@@ -138,6 +127,26 @@ struct Generator {
 
         return ok;
     }
+
+    #if Y2J_DEBUG
+    void printEvent(yaml_event_t& event, int indentSize) {
+        std::string indent(std::max(indentSize, 0), ' ');
+        switch (event.type) {
+        case YAML_NO_EVENT: printf("No event!\n"); break;
+        case YAML_STREAM_START_EVENT: printf("Start Stream\n"); break;
+        case YAML_STREAM_END_EVENT: printf("End Stream\n"); break;
+        case YAML_DOCUMENT_START_EVENT: printf("%s%s\n", indent.c_str(), "Start Document"); break;
+        case YAML_DOCUMENT_END_EVENT: printf("%s%s\n", indent.c_str(), "End Document"); break;
+        case YAML_SEQUENCE_START_EVENT: printf("%s[\n", indent.c_str()); break;
+        case YAML_SEQUENCE_END_EVENT: printf("%s] (members: %lu)\n", indent.c_str(), getSeqLength()); break;
+        case YAML_MAPPING_START_EVENT: printf("%s{\n", indent.c_str()); break;
+        case YAML_MAPPING_END_EVENT: printf("%s} (members: %lu)\n", indent.c_str(), getMapLength()); break;
+        case YAML_ALIAS_EVENT: printf("%sGot alias (anchor %s)\n", indent.c_str(), event.data.alias.anchor); break;
+        case YAML_SCALAR_EVENT: printf(entryIsMapKey() ? "%s\"%s\":\n" : "%s\"%s\"\n", indent.c_str(), event.data.scalar.value);
+            break;
+        }
+    }
+    #endif
 };
 
 JsonDocument yamlParseBytes(const char* bytes, size_t length, const char** errorMessage, size_t* errorOffset) {
