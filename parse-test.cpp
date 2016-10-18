@@ -1,4 +1,5 @@
 #include "y2j.h"
+#include "rapidjson/prettywriter.h"
 #include <cstdio>
 #include <ctime>
 #include <string>
@@ -49,6 +50,11 @@ int main(int argc, char* argv[]) {
     if (errorMessage) {
         printf("Error: %s at offset: %lu\n", errorMessage, errorOffset);
     }
+
+    rapidjson::StringBuffer buffer;
+    rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
+    document.Accept(writer);
+    printf("JSON result:\n%s\n", buffer.GetString());
 
     return 0;
 }
