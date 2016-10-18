@@ -17,9 +17,9 @@ struct Collection {
 template<typename Handler>
 struct Generator {
 
-    Generator(const char* bytes, size_t length, const char** errorMessage, size_t* errorOffset) :
+    Generator(const char* bytes, size_t length, const char** errorMessage, size_t* errorLine) :
         errorMessage(errorMessage),
-        errorOffset(errorOffset) {
+        errorLine(errorLine) {
         yaml_parser_initialize(&parser);
         yaml_parser_set_input_string(&parser, (const unsigned char*)bytes, length);
         yaml_parser_set_encoding(&parser, YAML_UTF8_ENCODING);
@@ -36,7 +36,7 @@ struct Generator {
     Collection collection;
     std::vector<Collection> collectionStack;
     const char** errorMessage;
-    size_t* errorOffset;
+    size_t* errorLine;
 
     size_t getSeqLength() {
         return collection.count;
@@ -74,8 +74,8 @@ struct Generator {
                 if (errorMessage) {
                     *errorMessage = parser.problem;
                 }
-                if (errorOffset) {
-                    *errorOffset = parser.context_mark.index;
+                if (errorLine) {
+                    *errorLine = parser.context_mark.line;
                 }
                 ok = false;
                 break;
