@@ -185,7 +185,19 @@ struct Generator {
     }
 
     bool parseNumber(Handler& handler, const char* value, size_t length, bool* parsed) {
-        // TODO: Parse doubles and integers.
+        // TODO: Optimize parsing of doubles and integers.
+        char* pos = (char*)value;
+        long i = strtol(value, &pos, 10);
+        if (pos == value + length) {
+            *parsed = true;
+            return handler.Int(i);
+        }
+        pos = (char*)value;
+        double d = strtod(value, &pos);
+        if (pos == value + length) {
+            *parsed = true;
+            return handler.Double(d);
+        }
         return true;
     }
 
