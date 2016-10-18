@@ -1,6 +1,7 @@
 #include "y2j.h"
 #include "yaml.h"
 #include <vector>
+#include <yaml.h>
 
 #ifndef Y2J_DEBUG
 #define Y2J_DEBUG 1
@@ -116,8 +117,7 @@ struct Generator {
                 if (entryIsMapKey()) {
                     ok = handler.Key((char*)event.data.scalar.value, event.data.scalar.length, true);
                 } else {
-                    ok = handler.String((char*)event.data.scalar.value, event.data.scalar.length, true);
-                    // FIXME: Deduce types for integer, float, boolean, and null scalar values.
+                    ok = parseScalar(handler, event);
                 }
                 collection.count++;
                 break;
@@ -125,6 +125,68 @@ struct Generator {
         }
 
         return ok;
+    }
+
+    bool parseScalar(Handler& handler, yaml_event_t event) {
+
+        const char* value = (char*)event.data.scalar.value;
+        size_t length = event.data.scalar.length;
+        bool parsed = false;
+        bool ok = true;
+
+        switch (value[0]) {
+        case '~':
+        case 'n':
+        case 'N':
+            ok = parseNull(handler, value, length, &parsed);
+            break;
+        case 't':
+        case 'T':
+            ok = parseTrue(handler, value, length, &parsed);
+            break;
+        case 'f':
+        case 'F':
+            ok = parseFalse(handler, value, length, &parsed);
+            break;
+        default:
+            ok = parseNumber(handler, value, length, &parsed);
+            break;
+        }
+
+        if (ok && !parsed) {
+            ok = handler.String(value, length, true);
+        }
+        return ok;
+    }
+
+    bool parseNull(Handler& handler, const char* value, size_t length, bool* parsed) {
+        if ((length == 1 && value[0] == '~') ||
+            (length == 4 && (strcmp(value, "null") == 0 || strcmp(value, "Null") == 0 || strcmp(value, "NULL") == 0))) {
+            *parsed = true;
+            return handler.Null();
+        }
+        return true;
+    }
+
+    bool parseTrue(Handler& handler, const char* value, size_t length, bool* parsed) {
+        if (length == 4 && (strcmp(value, "true") == 0 || strcmp(value, "True") == 0 || strcmp(value, "TRUE") == 0)) {
+            *parsed = true;
+            return handler.Bool(true);
+        }
+        return true;
+    }
+
+    bool parseFalse(Handler& handler, const char* value, size_t length, bool* parsed) {
+        if (length == 5 && (strcmp(value, "false") == 0 || strcmp(value, "False") == 0 || strcmp(value, "FALSE") == 0)) {
+            *parsed = true;
+            return handler.Bool(false);
+        }
+        return true;
+    }
+
+    bool parseNumber(Handler& handler, const char* value, size_t length, bool* parsed) {
+        // TODO: Parse doubles and integers.
+        return true;
     }
 
     #if Y2J_DEBUG
