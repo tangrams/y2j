@@ -33,7 +33,7 @@ int main(int argc, char* argv[]) {
             auto buffer = (char*)malloc(size);
             auto read = fread(buffer, 1, size, file);
             fclose(file);
-            printf("Read %lu bytes from: %s\n", inputSize, argv[1]);
+            printf("Read %lu bytes from: %s\n", read, argv[1]);
             inputString = buffer;
             inputSize = read;
         }
