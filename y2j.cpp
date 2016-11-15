@@ -1,7 +1,10 @@
 #include "y2j.h"
 #include "yaml.h"
+#include "rapidjson/pointer.h"
+#include "rapidjson/stringbuffer.h"
+#include <cassert>
+#include <string>
 #include <vector>
-#include <yaml.h>
 
 #ifndef Y2J_DEBUG
 #define Y2J_DEBUG 1
@@ -9,12 +12,25 @@
 
 namespace y2j {
 
+using JsonPointer = rapidjson::Pointer;
+using Handler = rapidjson::Document;
+
 struct Collection {
-    size_t count = 0;
-    bool isMapping = false;
+    std::string member; // Current member being processed in this collection.
+    size_t count = 0; // Current number of elements in this collection.
+    bool isMapping = true; // Whether this collection is a mapping or sequence.
 };
 
-template<typename Handler>
+struct Anchor {
+    std::string name;
+    JsonPointer value;
+};
+
+struct Alias {
+    JsonPointer anchor;
+    JsonPointer reference;
+};
+
 struct Generator {
 
     Generator(const char* bytes, size_t length, const char** errorMessage, size_t* errorLine) :
@@ -33,33 +49,75 @@ struct Generator {
 
     yaml_parser_t parser;
     yaml_event_t event;
-    Collection collection;
-    std::vector<Collection> collectionStack;
+    std::vector<Collection> collections;
+    std::vector<Anchor> anchors;
+    std::vector<Alias> aliases;
     const char** errorMessage;
     size_t* errorLine;
 
     size_t getSeqLength() {
-        return collection.count;
+        assert(!collections.empty());
+        assert(!collections.back().isMapping);
+        return collections.back().count;
     }
 
     size_t getMapLength() {
-        return collection.count / 2;
+        assert(!collections.empty());
+        assert(collections.back().isMapping);
+        return collections.back().count / 2;
     }
 
     bool entryIsMapKey() {
-        return collection.isMapping && collection.count % 2 == 0;
+        assert(!collections.empty());
+        return collections.back().isMapping && collections.back().count % 2 == 0;
     }
 
     void pushCollection(bool isMapping) {
-        ++collection.count;
-        collectionStack.push_back(collection);
-        collection.count = 0;
-        collection.isMapping = isMapping;
+        // A new collection is an entry in its parent, so increment the count.
+        if (!collections.empty()) {
+            ++collections.back().count;
+        }
+
+        // Push a new collection onto the stack.
+        collections.emplace_back();
+
+        // Set the values for the new collection.
+        collections.back().isMapping = isMapping;
     }
 
     void popCollection() {
-        collection = collectionStack.back();
-        collectionStack.pop_back();
+        collections.pop_back();
+    }
+
+    JsonPointer getJsonPointer() {
+        // Create a pointer starting from the root collection.
+        JsonPointer pointer;
+        for (const auto& c : collections) {
+            if (!c.member.empty()) {
+                pointer = pointer.Append(c.member.c_str(), c.member.length());
+            } else {
+                pointer = pointer.Append(c.count);
+            }
+        }
+        return pointer;
+    }
+
+    JsonPointer findJsonPointer(const char* alias) {
+        for (const auto& a : anchors) {
+            if (a.name == alias) {
+                return a.value;
+            }
+        }
+        // We shouldn't get here, this means we tried to find an anchor that
+        // was never defined. This is an error.
+        assert(false);
+        return JsonPointer();
+    }
+
+    void handleAnchor(const char* anchor) {
+        if (anchor) {
+            anchors.push_back({ std::string(anchor), getJsonPointer() });
+        }
     }
 
     bool operator()(Handler& handler) {
@@ -95,6 +153,7 @@ struct Generator {
             case YAML_SEQUENCE_START_EVENT:
                 // FIXME: If a sequence or mapping is found in a key, add a string version of this node instead.
                 ok = handler.StartArray();
+                handleAnchor((char*) event.data.sequence_start.anchor);
                 pushCollection(false);
                 break;
             case YAML_SEQUENCE_END_EVENT:
@@ -104,6 +163,7 @@ struct Generator {
             case YAML_MAPPING_START_EVENT:
                 // FIXME: If a sequence or mapping is found in a key, add a string version of this node instead.
                 ok = handler.StartObject();
+                handleAnchor((char*) event.data.mapping_start.anchor);
                 pushCollection(true);
                 break;
             case YAML_MAPPING_END_EVENT:
@@ -111,15 +171,21 @@ struct Generator {
                 popCollection();
                 break;
             case YAML_ALIAS_EVENT:
-                // FIXME: Support aliased nodes.
+                // Create a JSON pointer to the current node and add it to a list of references,
+                // then push a null as a placeholder.
+                aliases.push_back({ findJsonPointer((char*)event.data.alias.anchor), getJsonPointer() });
+                ok = handler.Null();
+                collections.back().count++;
                 break;
             case YAML_SCALAR_EVENT:
                 if (entryIsMapKey()) {
+                    collections.back().member.assign((char*)event.data.scalar.value, event.data.scalar.length);
                     ok = handler.Key((char*)event.data.scalar.value, event.data.scalar.length, true);
                 } else {
                     ok = parseScalar(handler, event);
                 }
-                collection.count++;
+                handleAnchor((char*) event.data.scalar.anchor);
+                collections.back().count++;
                 break;
             }
         }
@@ -138,6 +204,7 @@ struct Generator {
         case '~':
         case 'n':
         case 'N':
+            // FIXME: This catches 'NaN'
             ok = parseNull(handler, value, length, &parsed);
             break;
         case 't':
@@ -190,6 +257,7 @@ struct Generator {
         long i = strtol(value, &pos, 10);
         if (pos == value + length) {
             *parsed = true;
+            // FIXME: Check for integer overflow.
             return handler.Int(i);
         }
         pos = (char*)value;
@@ -226,9 +294,23 @@ struct Generator {
 
 JsonDocument yamlParseBytes(const char* bytes, size_t length, const char** errorMessage, size_t* errorOffset) {
 
-    Generator<JsonDocument> generator(bytes, length, errorMessage, errorOffset);
+    Generator generator(bytes, length, errorMessage, errorOffset);
     JsonDocument document;
     document.Populate(generator);
+
+    // Apply aliases.
+    for (const auto& a : generator.aliases) {
+        rapidjson::StringBuffer anch, ref;
+        #if Y2J_DEBUG
+        a.anchor.Stringify(anch);
+        a.reference.Stringify(ref);
+        printf("Applying anchor: %s reference: %s\n", anch.GetString(), ref.GetString());
+        #endif
+        const JsonValue* value = a.anchor.Get(document);
+        if (value) {
+            a.reference.Set(document, *value);
+        }
+    }
     return document;
 }
 

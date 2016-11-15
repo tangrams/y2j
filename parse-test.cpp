@@ -6,11 +6,11 @@
 
 const static std::string yaml = R"END(
 config:
-    default: hamburgers
+    default: &ank hamburgers
     fries_with_that: true
 stuff:
     backup: shake
-    things: [ snout, trout, clout ]
+    things: [ snout, trout, clout, *ank ]
 )END";
 
 using namespace y2j;
