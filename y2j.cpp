@@ -204,7 +204,6 @@ struct Generator {
         case '~':
         case 'n':
         case 'N':
-            // FIXME: This catches 'NaN'
             ok = parseNull(handler, value, length, &parsed);
             break;
         case 't':
@@ -216,10 +215,11 @@ struct Generator {
             ok = parseFalse(handler, value, length, &parsed);
             break;
         default:
-            ok = parseNumber(handler, value, length, &parsed);
             break;
         }
-
+        if (ok && !parsed) {
+            ok = parseNumber(handler, value, length, &parsed);
+        }
         if (ok && !parsed) {
             ok = handler.String(value, length, true);
         }
@@ -254,11 +254,10 @@ struct Generator {
     bool parseNumber(Handler& handler, const char* value, size_t length, bool* parsed) {
         // TODO: Optimize parsing of doubles and integers.
         char* pos = (char*)value;
-        long i = strtol(value, &pos, 10);
+        int64_t i = strtoll(value, &pos, 10);
         if (pos == value + length) {
             *parsed = true;
-            // FIXME: Check for integer overflow.
-            return handler.Int(i);
+            return handler.Int64(i);
         }
         pos = (char*)value;
         double d = strtod(value, &pos);
