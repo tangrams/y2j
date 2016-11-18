@@ -4,6 +4,8 @@ project (y2j)
 
 set(CMAKE_CXX_STANDARD 11)
 
+option(Y2J_BUILD_TESTS "Build tests for Y2J" ON)
+
 add_subdirectory(libyaml)
 
 include_directories(libyaml/include rapidjson)
@@ -15,3 +17,7 @@ target_link_libraries(y2j yaml)
 add_executable(parse-test parse-test.cpp)
 
 target_link_libraries(parse-test y2j)
+
+if (Y2J_BUILD_TESTS)
+  add_subdirectory(tests)
+endif()
