@@ -3,6 +3,7 @@
 #include "rapidjson/pointer.h"
 #include "rapidjson/stringbuffer.h"
 #include <cassert>
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -215,10 +216,8 @@ struct Generator {
             ok = parseFalse(handler, value, length, &parsed);
             break;
         default:
-            break;
-        }
-        if (ok && !parsed) {
             ok = parseNumber(handler, value, length, &parsed);
+            break;
         }
         if (ok && !parsed) {
             ok = handler.String(value, length, true);
@@ -252,6 +251,25 @@ struct Generator {
     }
 
     bool parseNumber(Handler& handler, const char* value, size_t length, bool* parsed) {
+        // Check for NaN:
+        //   (\.nan | \.NaN | \.NAN)
+        if (length == 4 && (strcmp(value, ".nan") == 0 || strcmp(value, ".NaN") == 0 || strcmp(value, ".NAN") == 0)) {
+            *parsed = true;
+            return handler.Double(NAN);
+        }
+        // Check for Inf:
+        //   [-+]? ( \.inf | \.Inf | \.INF )
+        const char* valuePastSign = value;
+        size_t lengthPastSign = length;
+        bool minus = (*value == '-');
+        if (minus || *value == '+') {
+            valuePastSign++;
+            lengthPastSign--;
+        }
+        if (lengthPastSign == 4 && (strcmp(valuePastSign, ".inf") == 0 || strcmp(value, ".Inf") == 0 || strcmp(value, ".INF") == 0)) {
+            *parsed = true;
+            return handler.Double(minus ? -INFINITY : INFINITY);
+        }
         // TODO: Optimize parsing of doubles and integers.
         char* pos = (char*)value;
         int64_t i = strtoll(value, &pos, 10);
