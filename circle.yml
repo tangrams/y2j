@@ -1,0 +1,5 @@
+test:
+  override:
+    - cmake .
+    - cmake --build .
+    - tests/all_tests
