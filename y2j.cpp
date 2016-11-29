@@ -8,7 +8,7 @@
 #include <vector>
 
 #ifndef Y2J_DEBUG
-#define Y2J_DEBUG 1
+#define Y2J_DEBUG 0
 #endif
 
 namespace y2j {
