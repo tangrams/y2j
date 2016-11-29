@@ -6,14 +6,28 @@
 // http://www.yaml.org/spec/1.2/spec.html#id2805071
 
 const char* source = R"END(
-canonical: 6.8523015e+5
-exponential: 685.23015e+03
-fixed: 685230.15
-negative infinity: -.inf
-not a number: .NaN
+floats:
+  - 685230.15
+  - 6.8523015e+5
+  - -685.23015e+03
+integers:
+  - +68523015
+  - -373
+  - 0x3A
+  - 0o100
+infinity:
+  - .inf
+  - .Inf
+  - .INF
+  - +.Inf
+  - -.Inf
+nan:
+  - .nan
+  - .NaN
+  - .NAN
 )END";
 
-TEST_CASE("Floating point numbers parse correctly")
+TEST_CASE("Numbers parse correctly")
 {
     const char* errorMessage = nullptr;
     size_t errorLine = 0;
@@ -21,40 +35,62 @@ TEST_CASE("Floating point numbers parse correctly")
 
     REQUIRE(errorMessage == nullptr);
 
-    SECTION("Canonical form")
+    SECTION("floats")
     {
-        auto& value = document["canonical"];
-        REQUIRE(value.IsDouble());
-        CHECK(value.GetDouble() == 685230.15);
+        auto& value = document["floats"];
+        REQUIRE(value.IsArray());
+        REQUIRE(value.Size() == 3);
+        CHECK(value[0].IsDouble());
+        CHECK(value[1].IsDouble());
+        CHECK(value[2].IsDouble());
+        CHECK(value[0].GetDouble() == 685230.15);
+        CHECK(value[1].GetDouble() == 685230.15);
+        CHECK(value[2].GetDouble() == -685230.15);
     }
 
-    SECTION("Exponential form")
+    SECTION("integers")
     {
-        auto& value = document["exponential"];
-        REQUIRE(value.IsDouble());
-        CHECK(value.GetDouble() == 685230.15);
+        auto& value = document["integers"];
+        REQUIRE(value.IsArray());
+        REQUIRE(value.Size() == 4);
+        CHECK(value[0].IsInt64());
+        CHECK(value[1].IsInt64());
+        CHECK(value[2].IsInt64());
+        CHECK(value[3].IsInt64());
+        CHECK(value[0].GetInt64() == 68523015);
+        CHECK(value[1].GetInt64() == -373);
+        CHECK(value[2].GetInt64() == 58);
+        CHECK(value[3].GetInt64() == 64);
     }
 
-    SECTION("Fixed decimal form")
+    SECTION("infinity")
     {
-        auto& value = document["fixed"];
-        REQUIRE(value.IsDouble());
-        CHECK(value.GetDouble() == 685230.15);
+        auto& value = document["infinity"];
+        REQUIRE(value.IsArray());
+        CHECK(value[0].IsDouble());
+        CHECK(value[1].IsDouble());
+        CHECK(value[2].IsDouble());
+        CHECK(value[3].IsDouble());
+        CHECK(value[4].IsDouble());
+        CHECK(isinf(value[0].GetDouble()));
+        CHECK(isinf(value[1].GetDouble()));
+        CHECK(isinf(value[2].GetDouble()));
+        CHECK(isinf(value[3].GetDouble()));
+        CHECK(isinf(value[4].GetDouble()));
+        CHECK(!signbit(value[0].GetDouble()));
+        CHECK(!signbit(value[1].GetDouble()));
+        CHECK(!signbit(value[2].GetDouble()));
+        CHECK(!signbit(value[3].GetDouble()));
+        CHECK(signbit(value[4].GetDouble()));
     }
 
-    SECTION("Negative infinity")
+    SECTION("nan")
     {
-        auto& value = document["negative infinity"];
-        REQUIRE(value.IsDouble());
-        CHECK(isinf(value.GetDouble()));
-        CHECK(signbit(value.GetDouble()));
-    }
-
-    SECTION("Not-a-number")
-    {
-        auto& value = document["not a number"];
-        REQUIRE(value.IsDouble());
-        CHECK(isnan(value.GetDouble()));
+        auto& value = document["nan"];
+        REQUIRE(value.IsArray());
+        CHECK(isnan(value[0].GetDouble()));
+        CHECK(isnan(value[1].GetDouble()));
+        CHECK(isnan(value[2].GetDouble()));
     }
 
 }
