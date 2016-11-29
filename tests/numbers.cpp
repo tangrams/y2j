@@ -5,7 +5,7 @@
 // YAML 1.2 Core Schema
 // http://www.yaml.org/spec/1.2/spec.html#id2805071
 
-const char* source = R"END(
+static const char* source = R"END(
 floats:
   - 685230.15
   - 6.8523015e+5
