@@ -1,6 +1,6 @@
 #include "catch.hpp"
 #include "y2j.h"
-#include <math.h>
+#include <cmath>
 
 // YAML 1.2 Core Schema
 // http://www.yaml.org/spec/1.2/spec.html#id2805071
@@ -72,25 +72,25 @@ TEST_CASE("Numbers parse correctly")
         CHECK(value[2].IsDouble());
         CHECK(value[3].IsDouble());
         CHECK(value[4].IsDouble());
-        CHECK(isinf(value[0].GetDouble()));
-        CHECK(isinf(value[1].GetDouble()));
-        CHECK(isinf(value[2].GetDouble()));
-        CHECK(isinf(value[3].GetDouble()));
-        CHECK(isinf(value[4].GetDouble()));
-        CHECK(!signbit(value[0].GetDouble()));
-        CHECK(!signbit(value[1].GetDouble()));
-        CHECK(!signbit(value[2].GetDouble()));
-        CHECK(!signbit(value[3].GetDouble()));
-        CHECK(signbit(value[4].GetDouble()));
+        CHECK(std::isinf(value[0].GetDouble()));
+        CHECK(std::isinf(value[1].GetDouble()));
+        CHECK(std::isinf(value[2].GetDouble()));
+        CHECK(std::isinf(value[3].GetDouble()));
+        CHECK(std::isinf(value[4].GetDouble()));
+        CHECK(!std::signbit(value[0].GetDouble()));
+        CHECK(!std::signbit(value[1].GetDouble()));
+        CHECK(!std::signbit(value[2].GetDouble()));
+        CHECK(!std::signbit(value[3].GetDouble()));
+        CHECK(std::signbit(value[4].GetDouble()));
     }
 
     SECTION("nan")
     {
         auto& value = document["nan"];
         REQUIRE(value.IsArray());
-        CHECK(isnan(value[0].GetDouble()));
-        CHECK(isnan(value[1].GetDouble()));
-        CHECK(isnan(value[2].GetDouble()));
+        CHECK(std::isnan(value[0].GetDouble()));
+        CHECK(std::isnan(value[1].GetDouble()));
+        CHECK(std::isnan(value[2].GetDouble()));
     }
 
 }
