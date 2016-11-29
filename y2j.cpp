@@ -251,35 +251,49 @@ struct Generator {
     }
 
     bool parseNumber(Handler& handler, const char* value, size_t length, bool* parsed) {
+        const char* start = value;
+        const char* end = value + length;
         // Check for NaN:
         //   (\.nan | \.NaN | \.NAN)
-        if (length == 4 && (strcmp(value, ".nan") == 0 || strcmp(value, ".NaN") == 0 || strcmp(value, ".NAN") == 0)) {
+        if (length == 4 && (strcmp(start, ".nan") == 0 || strcmp(start, ".NaN") == 0 || strcmp(start, ".NAN") == 0)) {
             *parsed = true;
             return handler.Double(NAN);
         }
         // Check for Inf:
         //   [-+]? ( \.inf | \.Inf | \.INF )
-        const char* valuePastSign = value;
-        size_t lengthPastSign = length;
         bool minus = (*value == '-');
         if (minus || *value == '+') {
-            valuePastSign++;
-            lengthPastSign--;
+            start++;
         }
-        if (lengthPastSign == 4 && (strcmp(valuePastSign, ".inf") == 0 || strcmp(value, ".Inf") == 0 || strcmp(value, ".INF") == 0)) {
+        if (end - start == 4 && (strcmp(start, ".inf") == 0 || strcmp(start, ".Inf") == 0 || strcmp(start, ".INF") == 0)) {
             *parsed = true;
             return handler.Double(minus ? -INFINITY : INFINITY);
         }
+        // Check for hexadecimal:
+        //   0x [0-9a-fA-F]+
+        // Or octal:
+        //   0o [0-7]+
+        start = value;
+        int base = 10;
+        if (length > 2 && value[0] == '0') {
+            if (value[1] == 'x') {
+                base = 16;
+                start += 2;
+            } else if (value[1] == 'o') {
+                base = 8;
+                start += 2;
+            }
+        }
         // TODO: Optimize parsing of doubles and integers.
-        char* pos = (char*)value;
-        int64_t i = strtoll(value, &pos, 10);
-        if (pos == value + length) {
+        char* pos = nullptr;
+        int64_t i = strtoll(start, &pos, base);
+        if (pos == end) {
             *parsed = true;
             return handler.Int64(i);
         }
-        pos = (char*)value;
-        double d = strtod(value, &pos);
-        if (pos == value + length) {
+        start = value;
+        double d = strtod(start, &pos);
+        if (pos == end) {
             *parsed = true;
             return handler.Double(d);
         }
