@@ -8,7 +8,7 @@
 #include <vector>
 
 #ifndef Y2J_DEBUG
-#define Y2J_DEBUG 1
+#define Y2J_DEBUG 0
 #endif
 
 namespace y2j {
@@ -72,7 +72,10 @@ struct Generator {
     }
 
     bool entryIsMapKey() {
-        return !collections.empty() && collections.back().isMapping && collections.back().count % 2 == 0;
+        return event.type != YAML_MAPPING_END_EVENT &&
+            !collections.empty() &&
+            collections.back().isMapping &&
+            collections.back().count % 2 == 0;
     }
 
     void pushCollection(bool isMapping) {
@@ -146,84 +149,86 @@ struct Generator {
             printEvent(event);
             #endif
 
-            bool isMapKey = entryIsMapKey();
-
-            switch (event.type) {
-            case YAML_NO_EVENT:
-            case YAML_STREAM_START_EVENT:
-            case YAML_STREAM_END_EVENT:
-            case YAML_DOCUMENT_START_EVENT:
-            case YAML_DOCUMENT_END_EVENT:
-                break;
-            case YAML_SEQUENCE_START_EVENT:
-                if (isMapKey || complexKeyDepth > 0) {
+            if (complexKeyDepth > 0) {
+                switch (event.type) {
+                case YAML_SEQUENCE_START_EVENT:
+                case YAML_MAPPING_START_EVENT:
                     complexKeyDepth++;
                     break;
-                }
-                ok = handler.StartArray();
-                handleAnchor((char*) event.data.sequence_start.anchor);
-                pushCollection(false);
-                break;
-            case YAML_SEQUENCE_END_EVENT:
-                if (complexKeyDepth == 1) {
-                    complexKeyDepth = 0;
-                    handler.Key(badKeyString, sizeof(badKeyString), true);
-                    collections.back().count++;
-                    break;
-                }
-                if (complexKeyDepth > 0) {
+                case YAML_SEQUENCE_END_EVENT:
+                case YAML_MAPPING_END_EVENT:
                     complexKeyDepth--;
                     break;
+                default:
+                    break;
                 }
-                ok = handler.EndArray(getSeqLength());
-                popCollection();
-                break;
-            case YAML_MAPPING_START_EVENT:
-                if (isMapKey || complexKeyDepth > 0) {
+                if (complexKeyDepth == 0) {
+                    handler.Key(badKeyString, sizeof(badKeyString), true);
+                    collections.back().count++;
+                }
+            } else if (entryIsMapKey()) {
+                switch (event.type) {
+                case YAML_SEQUENCE_START_EVENT:
+                case YAML_MAPPING_START_EVENT:
                     complexKeyDepth++;
                     break;
-                }
-                ok = handler.StartObject();
-                handleAnchor((char*) event.data.mapping_start.anchor);
-                pushCollection(true);
-                break;
-            case YAML_MAPPING_END_EVENT:
-                if (complexKeyDepth == 1) {
-                    complexKeyDepth = 0;
-                    handler.Key(badKeyString, sizeof(badKeyString), true);
+                case YAML_ALIAS_EVENT:
+                    // Create a JSON pointer to the current node and add it to a list of references,
+                    // then push a null as a placeholder.
+                    aliases.push_back({ findJsonPointer((char*)event.data.alias.anchor), getJsonPointer() });
+                    ok = handler.Null();
                     collections.back().count++;
                     break;
-                }
-                if (complexKeyDepth > 0) {
-                    complexKeyDepth--;
-                    break;
-                }
-                ok = handler.EndObject(getMapLength());
-                popCollection();
-                break;
-            case YAML_ALIAS_EVENT:
-                if (complexKeyDepth > 0) {
-                    break;
-                }
-                // Create a JSON pointer to the current node and add it to a list of references,
-                // then push a null as a placeholder.
-                aliases.push_back({ findJsonPointer((char*)event.data.alias.anchor), getJsonPointer() });
-                ok = handler.Null();
-                collections.back().count++;
-                break;
-            case YAML_SCALAR_EVENT:
-                if (complexKeyDepth > 0) {
-                    break;
-                }
-                if (isMapKey) {
+                case YAML_SCALAR_EVENT:
                     collections.back().member.assign((char*)event.data.scalar.value, event.data.scalar.length);
+                    handleAnchor((char*) event.data.scalar.anchor);
                     ok = handler.Key((char*)event.data.scalar.value, event.data.scalar.length, true);
-                } else {
-                    ok = parseScalar(handler, event);
+                    collections.back().count++;
+                    break;
+                default:
+                    // No other types of events should occur in a map key.
+                    assert(false);
+                    break;
                 }
-                handleAnchor((char*) event.data.scalar.anchor);
-                collections.back().count++;
-                break;
+            } else {
+                switch (event.type) {
+                case YAML_NO_EVENT:
+                case YAML_STREAM_START_EVENT:
+                case YAML_STREAM_END_EVENT:
+                case YAML_DOCUMENT_START_EVENT:
+                case YAML_DOCUMENT_END_EVENT:
+                    break;
+                case YAML_SEQUENCE_START_EVENT:
+                    ok = handler.StartArray();
+                    handleAnchor((char*)event.data.sequence_start.anchor);
+                    pushCollection(false);
+                    break;
+                case YAML_SEQUENCE_END_EVENT:
+                    ok = handler.EndArray(getSeqLength());
+                    popCollection();
+                    break;
+                case YAML_MAPPING_START_EVENT:
+                    ok = handler.StartObject();
+                    handleAnchor((char*)event.data.mapping_start.anchor);
+                    pushCollection(true);
+                    break;
+                case YAML_MAPPING_END_EVENT:
+                    ok = handler.EndObject(getMapLength());
+                    popCollection();
+                    break;
+                case YAML_ALIAS_EVENT:
+                    // Create a JSON pointer to the current node and add it to a list of references,
+                    // then push a null as a placeholder.
+                    aliases.push_back({ findJsonPointer((char*)event.data.alias.anchor), getJsonPointer() });
+                    ok = handler.Null();
+                    collections.back().count++;
+                    break;
+                case YAML_SCALAR_EVENT:
+                    handleAnchor((char*)event.data.scalar.anchor);
+                    ok = parseScalar(handler, event);
+                    collections.back().count++;
+                    break;
+                }
             }
         }
 
@@ -339,23 +344,27 @@ struct Generator {
     #if Y2J_DEBUG
     void printEvent(yaml_event_t& event) {
         static int indent = 0;
-        if (complexKeyDepth > 0) { return; }
         if (event.type == YAML_DOCUMENT_START_EVENT) { indent = 0; }
         if (event.type == YAML_SEQUENCE_END_EVENT || event.type == YAML_MAPPING_END_EVENT) { indent -= 2; }
         printf("%*s", indent, "");
-        switch (event.type) {
-        case YAML_NO_EVENT: printf("No event!\n"); break;
-        case YAML_STREAM_START_EVENT: printf("Start Stream\n"); break;
-        case YAML_STREAM_END_EVENT: printf("End Stream\n"); break;
-        case YAML_DOCUMENT_START_EVENT: printf("Start Document\n"); break;
-        case YAML_DOCUMENT_END_EVENT: printf("End Document\n"); break;
-        case YAML_SEQUENCE_START_EVENT: printf("[\n"); indent += 2; break;
-        case YAML_SEQUENCE_END_EVENT: printf("] (members: %lu)\n", getSeqLength()); break;
-        case YAML_MAPPING_START_EVENT: printf("{\n"); indent += 2; break;
-        case YAML_MAPPING_END_EVENT: printf("} (members: %lu)\n", getMapLength()); break;
-        case YAML_ALIAS_EVENT: printf("Alias (anchor %s)\n", event.data.alias.anchor); break;
-        case YAML_SCALAR_EVENT: printf(entryIsMapKey() ? "\"%s\":\n" : "\"%s\"\n", event.data.scalar.value); break;
+        if (complexKeyDepth > 0) {
+            printf("?\n");
+        } else {
+            switch (event.type) {
+            case YAML_NO_EVENT: printf("No event!\n"); break;
+            case YAML_STREAM_START_EVENT: printf("Start Stream\n"); break;
+            case YAML_STREAM_END_EVENT: printf("End Stream\n"); break;
+            case YAML_DOCUMENT_START_EVENT: printf("Start Document\n"); break;
+            case YAML_DOCUMENT_END_EVENT: printf("End Document\n"); break;
+            case YAML_SEQUENCE_START_EVENT: printf("[\n"); break;
+            case YAML_SEQUENCE_END_EVENT: printf("] (members: %lu)\n", getSeqLength()); break;
+            case YAML_MAPPING_START_EVENT: printf("{\n"); break;
+            case YAML_MAPPING_END_EVENT: printf("} (members: %lu)\n", getMapLength()); break;
+            case YAML_ALIAS_EVENT: printf("Alias (anchor %s)\n", event.data.alias.anchor); break;
+            case YAML_SCALAR_EVENT: printf(entryIsMapKey() ? "\"%s\":\n" : "\"%s\"\n", event.data.scalar.value); break;
+            }
         }
+        if (event.type == YAML_SEQUENCE_START_EVENT || event.type == YAML_MAPPING_START_EVENT) { indent += 2; }
     }
     #endif
 };
