@@ -32,7 +32,7 @@ struct Alias {
     JsonPointer reference;
 };
 
-const char badKeyString[] = "BAD KEY";
+const char complexKeyString[] = "COMPLEX YAML KEYS ARE NOT SUPPORTED";
 
 struct Generator {
 
@@ -163,7 +163,7 @@ struct Generator {
                     break;
                 }
                 if (complexKeyDepth == 0) {
-                    handler.Key(badKeyString, sizeof(badKeyString), true);
+                    handler.Key(complexKeyString, sizeof(complexKeyString), true);
                     collections.back().count++;
                 }
             } else if (entryIsMapKey()) {
