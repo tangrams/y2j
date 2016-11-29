@@ -8,7 +8,7 @@
 #include <vector>
 
 #ifndef Y2J_DEBUG
-#define Y2J_DEBUG 0
+#define Y2J_DEBUG 1
 #endif
 
 namespace y2j {
@@ -32,6 +32,8 @@ struct Alias {
     JsonPointer reference;
 };
 
+const char badKeyString[] = "BAD KEY";
+
 struct Generator {
 
     Generator(const char* bytes, size_t length, const char** errorMessage, size_t* errorLine) :
@@ -53,6 +55,7 @@ struct Generator {
     std::vector<Collection> collections;
     std::vector<Anchor> anchors;
     std::vector<Alias> aliases;
+    size_t complexKeyDepth = 0;
     const char** errorMessage;
     size_t* errorLine;
 
@@ -69,8 +72,7 @@ struct Generator {
     }
 
     bool entryIsMapKey() {
-        assert(!collections.empty());
-        return collections.back().isMapping && collections.back().count % 2 == 0;
+        return !collections.empty() && collections.back().isMapping && collections.back().count % 2 == 0;
     }
 
     void pushCollection(bool isMapping) {
@@ -144,6 +146,8 @@ struct Generator {
             printEvent(event);
             #endif
 
+            bool isMapKey = entryIsMapKey();
+
             switch (event.type) {
             case YAML_NO_EVENT:
             case YAML_STREAM_START_EVENT:
@@ -152,26 +156,55 @@ struct Generator {
             case YAML_DOCUMENT_END_EVENT:
                 break;
             case YAML_SEQUENCE_START_EVENT:
-                // FIXME: If a sequence or mapping is found in a key, add a string version of this node instead.
+                if (isMapKey || complexKeyDepth > 0) {
+                    complexKeyDepth++;
+                    break;
+                }
                 ok = handler.StartArray();
                 handleAnchor((char*) event.data.sequence_start.anchor);
                 pushCollection(false);
                 break;
             case YAML_SEQUENCE_END_EVENT:
+                if (complexKeyDepth == 1) {
+                    complexKeyDepth = 0;
+                    handler.Key(badKeyString, sizeof(badKeyString), true);
+                    collections.back().count++;
+                    break;
+                }
+                if (complexKeyDepth > 0) {
+                    complexKeyDepth--;
+                    break;
+                }
                 ok = handler.EndArray(getSeqLength());
                 popCollection();
                 break;
             case YAML_MAPPING_START_EVENT:
-                // FIXME: If a sequence or mapping is found in a key, add a string version of this node instead.
+                if (isMapKey || complexKeyDepth > 0) {
+                    complexKeyDepth++;
+                    break;
+                }
                 ok = handler.StartObject();
                 handleAnchor((char*) event.data.mapping_start.anchor);
                 pushCollection(true);
                 break;
             case YAML_MAPPING_END_EVENT:
+                if (complexKeyDepth == 1) {
+                    complexKeyDepth = 0;
+                    handler.Key(badKeyString, sizeof(badKeyString), true);
+                    collections.back().count++;
+                    break;
+                }
+                if (complexKeyDepth > 0) {
+                    complexKeyDepth--;
+                    break;
+                }
                 ok = handler.EndObject(getMapLength());
                 popCollection();
                 break;
             case YAML_ALIAS_EVENT:
+                if (complexKeyDepth > 0) {
+                    break;
+                }
                 // Create a JSON pointer to the current node and add it to a list of references,
                 // then push a null as a placeholder.
                 aliases.push_back({ findJsonPointer((char*)event.data.alias.anchor), getJsonPointer() });
@@ -179,7 +212,10 @@ struct Generator {
                 collections.back().count++;
                 break;
             case YAML_SCALAR_EVENT:
-                if (entryIsMapKey()) {
+                if (complexKeyDepth > 0) {
+                    break;
+                }
+                if (isMapKey) {
                     collections.back().member.assign((char*)event.data.scalar.value, event.data.scalar.length);
                     ok = handler.Key((char*)event.data.scalar.value, event.data.scalar.length, true);
                 } else {
@@ -303,6 +339,7 @@ struct Generator {
     #if Y2J_DEBUG
     void printEvent(yaml_event_t& event) {
         static int indent = 0;
+        if (complexKeyDepth > 0) { return; }
         if (event.type == YAML_DOCUMENT_START_EVENT) { indent = 0; }
         if (event.type == YAML_SEQUENCE_END_EVENT || event.type == YAML_MAPPING_END_EVENT) { indent -= 2; }
         printf("%*s", indent, "");
