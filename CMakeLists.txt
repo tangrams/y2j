@@ -1,8 +1,8 @@
-cmake_minimum_required (VERSION 3.1.3)
+cmake_minimum_required (VERSION 2.8.12)
 
 project (y2j)
 
-set(CMAKE_CXX_STANDARD 11)
+list(APPEND CMAKE_CXX_FLAGS "-std=c++11")
 
 option(Y2J_BUILD_TESTS "Build tests for Y2J" ON)
 
