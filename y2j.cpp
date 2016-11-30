@@ -6,6 +6,7 @@
 #include <cmath>
 #include <string>
 #include <vector>
+#include <yaml.h>
 
 #ifndef Y2J_DEBUG
 #define Y2J_DEBUG 0
@@ -242,6 +243,11 @@ struct Generator {
         bool parsed = false;
         bool ok = true;
 
+        if (event.data.scalar.style != YAML_PLAIN_SCALAR_STYLE) {
+            // See [1] below.
+            return handler.String(value, length, true);
+        }
+
         switch (value[0]) {
         case '~':
         case 'n':
@@ -392,3 +398,11 @@ JsonDocument yamlParseBytes(const char* bytes, size_t length, const char** error
 }
 
 } // namespace y2j
+
+// [1] The conditional here implies that any scalar value that is quoted in any
+// way or that uses a multi-line format will be deduced as a string type. This
+// is not part of the YAML 1.2 spec. However, the alternative would be to allow
+// quoted values like "76" to be interpreted as number types. That would differ
+// from the semantics of quoted values in JSON (which are always strings) and so
+// in keeping with the notion of YAML 1.2 as a strict superset of JSON, I have
+// enforced that quoted values become strings. -MEB 11/2016

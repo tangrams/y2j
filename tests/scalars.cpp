@@ -105,8 +105,7 @@ TEST_CASE("Non-number scalars parse correctly")
         CHECK(value[2].GetType() == rapidjson::kStringType);
         CHECK(value[3].GetType() == rapidjson::kStringType);
         CHECK(value[4].GetType() == rapidjson::kStringType);
-        // FIXME: an empty string should be distinct from no value.
-        // CHECK(value[5].GetType() == rapidjson::kStringType);
+        CHECK(value[5].GetType() == rapidjson::kStringType);
         // FIXME: strtod accepts several number formats outside the yaml spec.
         // CHECK(value[6].GetType() == rapidjson::kStringType);
     }
