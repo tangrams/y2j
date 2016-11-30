@@ -248,6 +248,10 @@ struct Generator {
             return handler.String(value, length, true);
         }
 
+        if (length == 0) {
+            return handler.Null();
+        }
+
         switch (value[0]) {
         case '~':
         case 'n':

@@ -70,8 +70,7 @@ TEST_CASE("Non-number scalars parse correctly")
         auto& value = document["null"];
         REQUIRE(value.IsArray());
         REQUIRE(value.Size() == 5);
-        // FIXME: an unquoted scalar with no value should be null.
-        // CHECK(value[0].GetType() == rapidjson::kNullType);
+        CHECK(value[0].GetType() == rapidjson::kNullType);
         CHECK(value[1].GetType() == rapidjson::kNullType);
         CHECK(value[2].GetType() == rapidjson::kNullType);
         CHECK(value[3].GetType() == rapidjson::kNullType);
