@@ -11,3 +11,4 @@ test:
     - cmake . -GNinja
     - cmake --build .
     - tests/all_tests
+    - benchmarks/parse
