@@ -14,6 +14,14 @@
 
 namespace y2j {
 
+static const char* TAG_NULL = "tag:yaml.org,2002:null";
+static const char* TAG_BOOL = "tag:yaml.org,2002:bool";
+static const char* TAG_INT = "tag:yaml.org,2002:int";
+static const char* TAG_FLOAT = "tag:yaml.org,2002:float";
+static const char* TAG_STR = "tag:yaml.org,2002:str";
+static const char* tagErrorString = "Scalar tag could not be resolved.";
+static const char complexKeyString[] = "COMPLEX YAML KEYS ARE NOT SUPPORTED";
+
 using JsonPointer = rapidjson::Pointer;
 using Handler = rapidjson::Document;
 
@@ -32,8 +40,6 @@ struct Alias {
     JsonPointer anchor;
     JsonPointer reference;
 };
-
-const char complexKeyString[] = "COMPLEX YAML KEYS ARE NOT SUPPORTED";
 
 struct Generator {
 
@@ -238,10 +244,32 @@ struct Generator {
 
     bool parseScalar(Handler& handler, yaml_event_t event) {
 
+        const char* tag = (char*)event.data.scalar.tag;
         const char* value = (char*)event.data.scalar.value;
         size_t length = event.data.scalar.length;
         bool parsed = false;
         bool ok = true;
+
+        if (tag) {
+            if (strcmp(tag, TAG_NULL) == 0) {
+                ok = parseNull(handler, value, length, &parsed);
+            } else if (strcmp(tag, TAG_BOOL) == 0) {
+                ok = parseBool(handler, value, length, &parsed);
+            } else if (strcmp(tag, TAG_INT) == 0) {
+                ok = parseInteger(handler, value, length, &parsed);
+            } else if (strcmp(tag, TAG_FLOAT) == 0) {
+                ok = parseFloat(handler, value, length, &parsed);
+            } else if (strcmp(tag, TAG_STR) == 0) {
+                ok = handler.String(value, length, true);
+                parsed = true;
+            }
+            if (!parsed) {
+                *errorMessage = tagErrorString;
+                *errorLine = event.start_mark.line;
+                ok = false;
+            }
+            return ok;
+        }
 
         if (event.data.scalar.style != YAML_PLAIN_SCALAR_STYLE) {
             // See [1] below.
@@ -301,7 +329,41 @@ struct Generator {
         return true;
     }
 
-    bool parseNumber(Handler& handler, const char* value, size_t length, bool* parsed) {
+    bool parseBool(Handler& handler, const char* value, size_t length, bool* parsed) {
+        bool ok = parseTrue(handler, value, length, parsed);
+        if (ok && !*parsed) {
+            return parseFalse(handler, value, length, parsed);
+        }
+        return ok;
+    }
+
+    bool parseInteger(Handler& handler, const char* value, size_t length, bool* parsed) {
+        // Check for hexadecimal:
+        //   0x [0-9a-fA-F]+
+        // Or octal:
+        //   0o [0-7]+
+        const char* end = value + length;
+        int base = 10;
+        if (length > 2 && value[0] == '0') {
+            if (value[1] == 'x') {
+                base = 16;
+                value += 2;
+            } else if (value[1] == 'o') {
+                base = 8;
+                value += 2;
+            }
+        }
+        // TODO: Optimize parsing of integers.
+        char* pos = nullptr;
+        int64_t i = strtoll(value, &pos, base);
+        if (pos == end) {
+            *parsed = true;
+            return handler.Int64(i);
+        }
+        return true;
+    }
+
+    bool parseFloat(Handler& handler, const char* value, size_t length, bool* parsed) {
         const char* start = value;
         const char* end = value + length;
         // Check for NaN:
@@ -312,43 +374,31 @@ struct Generator {
         }
         // Check for Inf:
         //   [-+]? ( \.inf | \.Inf | \.INF )
-        bool minus = (*value == '-');
-        if (minus || *value == '+') {
+        bool minus = (*start == '-');
+        if (minus || *start == '+') {
             start++;
         }
         if (end - start == 4 && (strcmp(start, ".inf") == 0 || strcmp(start, ".Inf") == 0 || strcmp(start, ".INF") == 0)) {
             *parsed = true;
             return handler.Double(minus ? -INFINITY : INFINITY);
         }
-        // Check for hexadecimal:
-        //   0x [0-9a-fA-F]+
-        // Or octal:
-        //   0o [0-7]+
         start = value;
-        int base = 10;
-        if (length > 2 && value[0] == '0') {
-            if (value[1] == 'x') {
-                base = 16;
-                start += 2;
-            } else if (value[1] == 'o') {
-                base = 8;
-                start += 2;
-            }
-        }
-        // TODO: Optimize parsing of doubles and integers.
+        // TODO: Optimize parsing of doubles.
         char* pos = nullptr;
-        int64_t i = strtoll(start, &pos, base);
-        if (pos == end) {
-            *parsed = true;
-            return handler.Int64(i);
-        }
-        start = value;
         double d = strtod(start, &pos);
         if (pos == end) {
             *parsed = true;
             return handler.Double(d);
         }
         return true;
+    }
+
+    bool parseNumber(Handler& handler, const char* value, size_t length, bool* parsed) {
+        bool ok = parseInteger(handler, value, length, parsed);
+        if (ok && !*parsed) {
+            return parseFloat(handler, value, length, parsed);
+        }
+        return ok;
     }
 
     #if Y2J_DEBUG
