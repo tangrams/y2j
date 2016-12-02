@@ -117,9 +117,9 @@ struct Generator {
     }
 
     JsonPointer findJsonPointer(const char* alias) {
-        for (const auto& a : anchors) {
-            if (a.name == alias) {
-                return a.value;
+        for (auto it = anchors.rbegin(); it != anchors.rend(); it++) {
+            if (it->name == alias) {
+                return it->value;
             }
         }
         // We shouldn't get here, this means we tried to find an anchor that
