@@ -6,7 +6,6 @@
 #include <cmath>
 #include <string>
 #include <vector>
-#include <yaml.h>
 
 #ifndef Y2J_DEBUG
 #define Y2J_DEBUG 0
@@ -37,8 +36,7 @@ struct Anchor {
 };
 
 struct Alias {
-    JsonPointer anchor;
-    JsonPointer reference;
+    JsonPointer anchor, reference;
 };
 
 struct Generator {
@@ -437,17 +435,16 @@ JsonDocument yamlParseBytes(const char* bytes, size_t length, const char** error
     document.Populate(generator);
 
     // Apply aliases.
-    for (const auto& a : generator.aliases) {
-        rapidjson::StringBuffer anch, ref;
+    for (const auto& alias : generator.aliases) {
         #if Y2J_DEBUG
-        a.anchor.Stringify(anch);
-        a.reference.Stringify(ref);
-        printf("Applying anchor: %s reference: %s\n", anch.GetString(), ref.GetString());
+        rapidjson::StringBuffer anchor, reference;
+        alias.anchor.Stringify(anchor);
+        alias.reference.Stringify(reference);
+        printf("Applying anchor: %s reference: %s\n", anchor.GetString(), reference.GetString());
         #endif
-        const JsonValue* value = a.anchor.Get(document);
-        if (value) {
-            a.reference.Set(document, *value);
-        }
+        const JsonValue* value = alias.anchor.Get(document);
+        assert(value);
+        alias.reference.Set(document, *value);
     }
     return document;
 }
