@@ -86,11 +86,6 @@ struct Generator {
     }
 
     void pushCollection(bool isMapping) {
-        // A new collection is an entry in its parent, so increment the count.
-        if (!collections.empty()) {
-            ++collections.back().count;
-        }
-
         // Push a new collection onto the stack.
         collections.emplace_back();
 
@@ -99,7 +94,13 @@ struct Generator {
     }
 
     void popCollection() {
+        // Remove the current collection from the back of the stack.
         collections.pop_back();
+
+        // A new collection is an entry in its parent, so increment the count.
+        if (!collections.empty()) {
+            ++collections.back().count;
+        }
     }
 
     JsonPointer getJsonPointer() {
