@@ -1,12 +1,13 @@
 include_directories(${PROJECT_SOURCE_DIR})
 
 add_executable(all_tests
+  aliases.cpp
+  complex.cpp
+  errors.cpp
   main.cpp
   numbers.cpp
-  complex.cpp
   scalars.cpp
   tags.cpp
-  aliases.cpp
 )
 
 target_link_libraries(all_tests y2j)
