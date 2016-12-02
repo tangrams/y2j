@@ -6,6 +6,7 @@ add_executable(all_tests
   complex.cpp
   scalars.cpp
   tags.cpp
+  aliases.cpp
 )
 
 target_link_libraries(all_tests y2j)
