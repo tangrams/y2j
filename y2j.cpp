@@ -19,6 +19,7 @@ static const char* TAG_INT = "tag:yaml.org,2002:int";
 static const char* TAG_FLOAT = "tag:yaml.org,2002:float";
 static const char* TAG_STR = "tag:yaml.org,2002:str";
 static const char* tagErrorString = "Scalar tag could not be resolved.";
+static const char* aliasErrorString = "Encountered an unidentified alias";
 static const char complexKeyString[] = "COMPLEX YAML KEYS ARE NOT SUPPORTED";
 
 using JsonPointer = rapidjson::Pointer;
@@ -114,22 +115,31 @@ struct Generator {
         return pointer;
     }
 
-    JsonPointer findJsonPointer(const char* alias) {
-        for (auto it = anchors.rbegin(); it != anchors.rend(); it++) {
-            if (it->name == alias) {
-                return it->value;
-            }
-        }
-        // We shouldn't get here, this means we tried to find an anchor that
-        // was never defined. This is an error.
-        assert(false);
-        return JsonPointer();
-    }
-
     void handleAnchor(const char* anchor) {
         if (anchor) {
             anchors.push_back({ std::string(anchor), getJsonPointer() });
         }
+    }
+
+    bool handleAlias(Handler& handler, yaml_event_t event) {
+        const char* anchor = (char*)event.data.alias.anchor;
+        JsonPointer* pointer = nullptr;
+        for (auto it = anchors.rbegin(); it != anchors.rend(); it++) {
+            if (it->name == anchor) {
+                pointer = &it->value;
+                break;
+            }
+        }
+        if (!pointer) {
+            // This means we tried to find an anchor that was never defined.
+            *errorLine = event.start_mark.line;
+            *errorMessage = aliasErrorString;
+            return false;
+        }
+        // Create a JSON pointer to the current node and add it to a list of
+        // references, then push a null as a placeholder.
+        aliases.push_back({ *pointer, getJsonPointer() });
+        return handler.Null();
     }
 
     bool operator()(Handler& handler) {
@@ -179,10 +189,7 @@ struct Generator {
                     complexKeyDepth++;
                     break;
                 case YAML_ALIAS_EVENT:
-                    // Create a JSON pointer to the current node and add it to a list of references,
-                    // then push a null as a placeholder.
-                    aliases.push_back({ findJsonPointer((char*)event.data.alias.anchor), getJsonPointer() });
-                    ok = handler.Null();
+                    ok = handleAlias(handler, event);
                     collections.back().count++;
                     break;
                 case YAML_SCALAR_EVENT:
@@ -223,10 +230,7 @@ struct Generator {
                     popCollection();
                     break;
                 case YAML_ALIAS_EVENT:
-                    // Create a JSON pointer to the current node and add it to a list of references,
-                    // then push a null as a placeholder.
-                    aliases.push_back({ findJsonPointer((char*)event.data.alias.anchor), getJsonPointer() });
-                    ok = handler.Null();
+                    ok = handleAlias(handler, event);
                     collections.back().count++;
                     break;
                 case YAML_SCALAR_EVENT:
